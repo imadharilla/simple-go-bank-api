@@ -4,6 +4,8 @@ import (
 	"context"
 	"tiny-bank-api/pkg/database"
 	"tiny-bank-api/store/entities"
+
+	"github.com/jmoiron/sqlx"
 )
 
 type Store struct {
@@ -67,4 +69,37 @@ func (s Store) AddBalance(ctx context.Context, accountId int64, amount float64) 
 	`
 	_, err := s.db.ExecContext(ctx, q, amount, accountId)
 	return err
+}
+
+func (s Store) AddBalanceWithTx(ctx context.Context, tx database.Querier, accountId int64, amount float64) error {
+	q := `
+		UPDATE accounts 
+		SET balance = balance + $1, updated_at = NOW()
+		WHERE id = $2;
+	`
+	_, err := tx.ExecContext(ctx, q, amount, accountId)
+	return err
+}
+
+func (s Store) SubtractBalanceWithTx(ctx context.Context, tx database.Querier, accountId int64, amount float64) error {
+	q := `
+		UPDATE accounts 
+		SET balance = balance - $1, updated_at = NOW()
+		WHERE id = $2;
+	`
+	_, err := tx.ExecContext(ctx, q, amount, accountId)
+	return err
+}
+
+func (s Store) GetAccountByIdWithTx(ctx context.Context, tx database.Querier, accountId int64) (entities.Account, error) {
+	var account entities.Account
+	q := `SELECT id, name, balance, created_at, updated_at FROM accounts WHERE id = $1;`
+	if err := tx.QueryRowxContext(ctx, q, accountId).StructScan(&account); err != nil {
+		return entities.Account{}, err
+	}
+	return account, nil
+}
+
+func (s Store) BeginTx(ctx context.Context) (*sqlx.Tx, error) {
+	return s.db.BeginTxx(ctx, nil)
 }

@@ -91,3 +91,36 @@ func mustPOSTAddBalance(t *testing.T, handler http.Handler, accountId int64, amo
 	rec := reqPOSTAddBalance(t, handler, accountId, amount)
 	requireStatus(t, http.StatusOK, rec)
 }
+
+func reqPOSTTransfer(t *testing.T, handler http.Handler, sourceAccountId int64, targetAccountId int64, amount float64) *httptest.ResponseRecorder {
+	t.Helper()
+	jsonBody, err := json.Marshal(map[string]any{
+		"amount":          amount,
+		"targetAccountId": targetAccountId,
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal request body: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/accounts/%d/transfer", sourceAccountId), bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
+}
+
+func mustPOSTTransfer(t *testing.T, handler http.Handler, sourceAccountId int64, targetAccountId int64, amount float64) {
+	t.Helper()
+	rec := reqPOSTTransfer(t, handler, sourceAccountId, targetAccountId, amount)
+	requireStatus(t, http.StatusOK, rec)
+}
+
+func requireErrorMessage(t *testing.T, expected string, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	var errResp api.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp.Message != expected {
+		t.Fatalf("expected error message %q, got %q", expected, errResp.Message)
+	}
+}

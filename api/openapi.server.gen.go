@@ -52,11 +52,29 @@ type CreateAccountRequest struct {
 	Name string `json:"name"`
 }
 
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	// Message A custom error message describing what went wrong
+	Message string `json:"message"`
+}
+
+// TransferRequest defines model for TransferRequest.
+type TransferRequest struct {
+	// Amount The amount to transfer to the target account
+	Amount float64 `json:"amount"`
+
+	// TargetAccountId The ID of the target account to receive the transfer
+	TargetAccountId int64 `json:"targetAccountId"`
+}
+
 // CreateAccountJSONRequestBody defines body for CreateAccount for application/json ContentType.
 type CreateAccountJSONRequestBody = CreateAccountRequest
 
 // AddBalanceToAccountJSONRequestBody defines body for AddBalanceToAccount for application/json ContentType.
 type AddBalanceToAccountJSONRequestBody = AddBalanceRequest
+
+// TransferMoneyJSONRequestBody defines body for TransferMoney for application/json ContentType.
+type TransferMoneyJSONRequestBody = TransferRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -69,6 +87,9 @@ type ServerInterface interface {
 	// Add balance to an account
 	// (POST /accounts/{accountId}/add-balance)
 	AddBalanceToAccount(w http.ResponseWriter, r *http.Request, accountId int64)
+	// Transfer money to another account
+	// (POST /accounts/{accountId}/transfer)
+	TransferMoney(w http.ResponseWriter, r *http.Request, accountId int64)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -90,6 +111,12 @@ func (_ Unimplemented) CreateAccount(w http.ResponseWriter, r *http.Request) {
 // Add balance to an account
 // (POST /accounts/{accountId}/add-balance)
 func (_ Unimplemented) AddBalanceToAccount(w http.ResponseWriter, r *http.Request, accountId int64) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Transfer money to another account
+// (POST /accounts/{accountId}/transfer)
+func (_ Unimplemented) TransferMoney(w http.ResponseWriter, r *http.Request, accountId int64) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -146,6 +173,31 @@ func (siw *ServerInterfaceWrapper) AddBalanceToAccount(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AddBalanceToAccount(w, r, accountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TransferMoney operation middleware
+func (siw *ServerInterfaceWrapper) TransferMoney(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TransferMoney(w, r, accountId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -277,6 +329,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/accounts/{accountId}/add-balance", wrapper.AddBalanceToAccount)
 	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/accounts/{accountId}/transfer", wrapper.TransferMoney)
+	})
 
 	return r
 }
@@ -346,6 +401,32 @@ func (response AddBalanceToAccount404Response) VisitAddBalanceToAccountResponse(
 	return nil
 }
 
+type TransferMoneyRequestObject struct {
+	AccountId int64 `json:"accountId"`
+	Body      *TransferMoneyJSONRequestBody
+}
+
+type TransferMoneyResponseObject interface {
+	VisitTransferMoneyResponse(w http.ResponseWriter) error
+}
+
+type TransferMoney200Response struct {
+}
+
+func (response TransferMoney200Response) VisitTransferMoneyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type TransferMoney400JSONResponse ErrorResponse
+
+func (response TransferMoney400JSONResponse) VisitTransferMoneyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Get all accounts
@@ -357,6 +438,9 @@ type StrictServerInterface interface {
 	// Add balance to an account
 	// (POST /accounts/{accountId}/add-balance)
 	AddBalanceToAccount(ctx context.Context, request AddBalanceToAccountRequestObject) (AddBalanceToAccountResponseObject, error)
+	// Transfer money to another account
+	// (POST /accounts/{accountId}/transfer)
+	TransferMoney(ctx context.Context, request TransferMoneyRequestObject) (TransferMoneyResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -476,23 +560,59 @@ func (sh *strictHandler) AddBalanceToAccount(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// TransferMoney operation middleware
+func (sh *strictHandler) TransferMoney(w http.ResponseWriter, r *http.Request, accountId int64) {
+	var request TransferMoneyRequestObject
+
+	request.AccountId = accountId
+
+	var body TransferMoneyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TransferMoney(ctx, request.(TransferMoneyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TransferMoney")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TransferMoneyResponseObject); ok {
+		if err := validResponse.VisitTransferMoneyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

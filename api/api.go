@@ -69,3 +69,48 @@ func (s API) AddBalanceToAccount(ctx context.Context, request AddBalanceToAccoun
 
 	return AddBalanceToAccount200Response{}, nil
 }
+
+func (s API) TransferMoney(ctx context.Context, request TransferMoneyRequestObject) (TransferMoneyResponseObject, error) {
+	if request.Body.Amount <= 0 {
+		return TransferMoney400JSONResponse{Message: "amount must be greater than 0"}, nil
+	}
+	if request.AccountId == request.Body.TargetAccountId {
+		return TransferMoney400JSONResponse{Message: "cannot transfer to the same account"}, nil
+	}
+
+	tx, err := s.store.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// check target account exists
+	_, err = s.store.GetAccountByIdWithTx(ctx, tx, request.Body.TargetAccountId)
+	if err != nil {
+		return TransferMoney400JSONResponse{Message: "target account not found"}, nil
+	}
+
+	// Check source account exists and has sufficient balance
+	sourceAccount, err := s.store.GetAccountByIdWithTx(ctx, tx, request.AccountId)
+	if err != nil {
+		return TransferMoney400JSONResponse{Message: "source account not found"}, nil
+	}
+	if sourceAccount.Balance < request.Body.Amount {
+		return TransferMoney400JSONResponse{Message: "insufficient balance"}, nil
+	}
+
+	err = s.store.SubtractBalanceWithTx(ctx, tx, request.AccountId, request.Body.Amount)
+	if err != nil {
+		return nil, err
+	}
+	err = s.store.AddBalanceWithTx(ctx, tx, request.Body.TargetAccountId, request.Body.Amount)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return TransferMoney200Response{}, nil
+}
