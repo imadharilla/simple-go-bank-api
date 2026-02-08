@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	"tiny-bank-api/api"
 	"tiny-bank-api/pkg/database"
 	"tiny-bank-api/pkg/logging"
@@ -15,7 +17,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/staffbase/gopackages/httpserver"
 )
 
 type CmdServe struct {
@@ -46,10 +47,27 @@ func (c CmdServe) Run() error {
 	s := store.NewStore(sqldb)
 
 	svc := NewService(logger, s)
-	if err := httpserver.Run(ctx,
-		httpserver.Setup(svc, httpserver.WithListenAddress(c.ListenAddress)),
-		httpserver.RunOptions{}); err != nil {
-		logger.Error("error starting http server: " + err.Error())
+
+	server := &http.Server{
+		Addr:    c.ListenAddress,
+		Handler: svc,
+	}
+
+	go func() {
+		logger.Info("Starting HTTP server", "address", c.ListenAddress)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("error starting http server: " + err.Error())
+		}
+	}()
+
+	<-ctx.Done()
+	logger.Info("Shutting down HTTP server...")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("error shutting down http server: " + err.Error())
 	}
 
 	return nil
