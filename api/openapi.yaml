@@ -4,7 +4,7 @@ info:
   description: API server for managing bank accounts.
   version: 0.0.1
 servers:
-  - url: /api
+  - url: localhost:8080/api
 
 paths:
   /accounts:
