@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"log/slog"
 	"tiny-bank-api/pkg/database"
 	"tiny-bank-api/store/entities"
 
@@ -44,7 +45,11 @@ func (s Store) GetAccounts(ctx context.Context) ([]entities.Account, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err = rows.Close(); err != nil {
+			slog.Warn("Failed to close rows", "error", err)
+		}
+	}()
 
 	for rows.Next() {
 		var account entities.Account

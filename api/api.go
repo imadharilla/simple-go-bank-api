@@ -82,7 +82,11 @@ func (s API) TransferMoney(ctx context.Context, request TransferMoneyRequestObje
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err = tx.Rollback(); err != nil {
+			slog.Warn("Failed to rollback the transaction", "error", err)
+		}
+	}()
 
 	// check target account exists
 	_, err = s.store.GetAccountByIdWithTx(ctx, tx, request.Body.TargetAccountId)
