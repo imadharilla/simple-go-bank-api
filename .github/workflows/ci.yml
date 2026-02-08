@@ -50,11 +50,3 @@ jobs:
         env:
           DEPLOY_ENV: test
         run: go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out -v ./...
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
-
-
