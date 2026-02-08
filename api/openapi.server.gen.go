@@ -18,8 +18,8 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Account defines model for Account.
@@ -29,9 +29,6 @@ type Account struct {
 
 	// CreatedAt Timestamp when the account was created
 	CreatedAt time.Time `json:"created_at"`
-
-	// Email Email address of the account holder
-	Email openapi_types.Email `json:"email"`
 
 	// Id Unique identifier for the account
 	Id int64 `json:"id"`
@@ -43,17 +40,41 @@ type Account struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// AddBalanceRequest defines model for AddBalanceRequest.
+type AddBalanceRequest struct {
+	// Amount The amount to add to the account balance
+	Amount float64 `json:"amount"`
+}
+
 // CreateAccountRequest defines model for CreateAccountRequest.
 type CreateAccountRequest struct {
-	// Email Email address of the account holder
-	Email openapi_types.Email `json:"email"`
-
 	// Name Name of the account holder
 	Name string `json:"name"`
 }
 
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	// Message A custom error message describing what went wrong
+	Message string `json:"message"`
+}
+
+// TransferRequest defines model for TransferRequest.
+type TransferRequest struct {
+	// Amount The amount to transfer to the target account
+	Amount float64 `json:"amount"`
+
+	// TargetAccountId The ID of the target account to receive the transfer
+	TargetAccountId int64 `json:"targetAccountId"`
+}
+
 // CreateAccountJSONRequestBody defines body for CreateAccount for application/json ContentType.
 type CreateAccountJSONRequestBody = CreateAccountRequest
+
+// AddBalanceToAccountJSONRequestBody defines body for AddBalanceToAccount for application/json ContentType.
+type AddBalanceToAccountJSONRequestBody = AddBalanceRequest
+
+// TransferMoneyJSONRequestBody defines body for TransferMoney for application/json ContentType.
+type TransferMoneyJSONRequestBody = TransferRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -63,6 +84,12 @@ type ServerInterface interface {
 	// Create a new account
 	// (POST /accounts)
 	CreateAccount(w http.ResponseWriter, r *http.Request)
+	// Add balance to an account
+	// (POST /accounts/{accountId}/add-balance)
+	AddBalanceToAccount(w http.ResponseWriter, r *http.Request, accountId int64)
+	// Transfer money to another account
+	// (POST /accounts/{accountId}/transfer)
+	TransferMoney(w http.ResponseWriter, r *http.Request, accountId int64)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -78,6 +105,18 @@ func (_ Unimplemented) GetAccounts(w http.ResponseWriter, r *http.Request) {
 // Create a new account
 // (POST /accounts)
 func (_ Unimplemented) CreateAccount(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Add balance to an account
+// (POST /accounts/{accountId}/add-balance)
+func (_ Unimplemented) AddBalanceToAccount(w http.ResponseWriter, r *http.Request, accountId int64) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Transfer money to another account
+// (POST /accounts/{accountId}/transfer)
+func (_ Unimplemented) TransferMoney(w http.ResponseWriter, r *http.Request, accountId int64) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -109,6 +148,56 @@ func (siw *ServerInterfaceWrapper) CreateAccount(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateAccount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddBalanceToAccount operation middleware
+func (siw *ServerInterfaceWrapper) AddBalanceToAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddBalanceToAccount(w, r, accountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TransferMoney operation middleware
+func (siw *ServerInterfaceWrapper) TransferMoney(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TransferMoney(w, r, accountId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -237,6 +326,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/accounts", wrapper.CreateAccount)
 	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/accounts/{accountId}/add-balance", wrapper.AddBalanceToAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/accounts/{accountId}/transfer", wrapper.TransferMoney)
+	})
 
 	return r
 }
@@ -265,11 +360,69 @@ type CreateAccountResponseObject interface {
 	VisitCreateAccountResponse(w http.ResponseWriter) error
 }
 
-type CreateAccount201JSONResponse Account
+type CreateAccount201Response struct {
+}
 
-func (response CreateAccount201JSONResponse) VisitCreateAccountResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
+func (response CreateAccount201Response) VisitCreateAccountResponse(w http.ResponseWriter) error {
 	w.WriteHeader(201)
+	return nil
+}
+
+type AddBalanceToAccountRequestObject struct {
+	AccountId int64 `json:"accountId"`
+	Body      *AddBalanceToAccountJSONRequestBody
+}
+
+type AddBalanceToAccountResponseObject interface {
+	VisitAddBalanceToAccountResponse(w http.ResponseWriter) error
+}
+
+type AddBalanceToAccount200Response struct {
+}
+
+func (response AddBalanceToAccount200Response) VisitAddBalanceToAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type AddBalanceToAccount400Response struct {
+}
+
+func (response AddBalanceToAccount400Response) VisitAddBalanceToAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type AddBalanceToAccount404Response struct {
+}
+
+func (response AddBalanceToAccount404Response) VisitAddBalanceToAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type TransferMoneyRequestObject struct {
+	AccountId int64 `json:"accountId"`
+	Body      *TransferMoneyJSONRequestBody
+}
+
+type TransferMoneyResponseObject interface {
+	VisitTransferMoneyResponse(w http.ResponseWriter) error
+}
+
+type TransferMoney200Response struct {
+}
+
+func (response TransferMoney200Response) VisitTransferMoneyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type TransferMoney400JSONResponse ErrorResponse
+
+func (response TransferMoney400JSONResponse) VisitTransferMoneyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -282,6 +435,12 @@ type StrictServerInterface interface {
 	// Create a new account
 	// (POST /accounts)
 	CreateAccount(ctx context.Context, request CreateAccountRequestObject) (CreateAccountResponseObject, error)
+	// Add balance to an account
+	// (POST /accounts/{accountId}/add-balance)
+	AddBalanceToAccount(ctx context.Context, request AddBalanceToAccountRequestObject) (AddBalanceToAccountResponseObject, error)
+	// Transfer money to another account
+	// (POST /accounts/{accountId}/transfer)
+	TransferMoney(ctx context.Context, request TransferMoneyRequestObject) (TransferMoneyResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -368,20 +527,92 @@ func (sh *strictHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// AddBalanceToAccount operation middleware
+func (sh *strictHandler) AddBalanceToAccount(w http.ResponseWriter, r *http.Request, accountId int64) {
+	var request AddBalanceToAccountRequestObject
+
+	request.AccountId = accountId
+
+	var body AddBalanceToAccountJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddBalanceToAccount(ctx, request.(AddBalanceToAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddBalanceToAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddBalanceToAccountResponseObject); ok {
+		if err := validResponse.VisitAddBalanceToAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TransferMoney operation middleware
+func (sh *strictHandler) TransferMoney(w http.ResponseWriter, r *http.Request, accountId int64) {
+	var request TransferMoneyRequestObject
+
+	request.AccountId = accountId
+
+	var body TransferMoneyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TransferMoney(ctx, request.(TransferMoneyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TransferMoney")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TransferMoneyResponseObject); ok {
+		if err := validResponse.VisitTransferMoneyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -7,11 +7,17 @@ else
     CONTAINER_RUNTIME=docker
 endif
 
-.PHONY: up down
+.PHONY: up down test dev
 
 up:
 	$(CONTAINER_RUNTIME) compose -f docker-compose.yml up -d
 
 down:
-	$(CONTAINER_RUNTIME) compose -f docker-compose.yml down
+	$(CONTAINER_RUNTIME) compose -f docker-compose.yml down -v
+
+test:
+	go test -v ./...
+
+dev:
+	go run . serve
 
