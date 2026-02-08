@@ -15,3 +15,6 @@ up:
 down:
 	$(CONTAINER_RUNTIME) compose -f docker-compose.yml down
 
+run:
+	go run . serve
+

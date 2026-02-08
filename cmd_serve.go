@@ -21,8 +21,8 @@ import (
 
 type CmdServe struct {
 	ListenAddress    string `help:"Port to listen on." default:"localhost:8080" env:"LISTEN_PORT"`
-	PostgresUser     string `name:"postgresuser" help:"Username to authenticate with." default:"postgresuser" env:"POSTGRES_USER"`
-	PostgresPassword string `name:"postgrespassword" help:"Password to authenticate with." default:"postgresuser" env:"POSTGRES_PASSWORD"`
+	PostgresUser     string `name:"postgresuser" help:"Username to authenticate with." default:"postgres" env:"POSTGRES_USER"`
+	PostgresPassword string `name:"postgrespassword" help:"Password to authenticate with." default:"postgres" env:"POSTGRES_PASSWORD"`
 	PostgresHost     string `name:"postgreshost" help:"Host of the postgresql database." default:"localhost:5432" env:"POSTGRES_HOST"`
 }
 

@@ -25,6 +25,9 @@ func (s API) GetAccounts(ctx context.Context, request GetAccountsRequestObject) 
 }
 
 func (s API) CreateAccount(ctx context.Context, request CreateAccountRequestObject) (CreateAccountResponseObject, error) {
-	//TODO implement me
-	panic("implement me")
+	err := s.store.CreateAccount(ctx, request.Body.Name, 0)
+	if err != nil {
+		return nil, err
+	}
+	return CreateAccount201Response{}, nil
 }

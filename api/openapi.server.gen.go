@@ -19,7 +19,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Account defines model for Account.
@@ -29,9 +28,6 @@ type Account struct {
 
 	// CreatedAt Timestamp when the account was created
 	CreatedAt time.Time `json:"created_at"`
-
-	// Email Email address of the account holder
-	Email openapi_types.Email `json:"email"`
 
 	// Id Unique identifier for the account
 	Id int64 `json:"id"`
@@ -45,9 +41,6 @@ type Account struct {
 
 // CreateAccountRequest defines model for CreateAccountRequest.
 type CreateAccountRequest struct {
-	// Email Email address of the account holder
-	Email openapi_types.Email `json:"email"`
-
 	// Name Name of the account holder
 	Name string `json:"name"`
 }
@@ -265,13 +258,12 @@ type CreateAccountResponseObject interface {
 	VisitCreateAccountResponse(w http.ResponseWriter) error
 }
 
-type CreateAccount201JSONResponse Account
+type CreateAccount201Response struct {
+}
 
-func (response CreateAccount201JSONResponse) VisitCreateAccountResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
+func (response CreateAccount201Response) VisitCreateAccountResponse(w http.ResponseWriter) error {
 	w.WriteHeader(201)
-
-	return json.NewEncoder(w).Encode(response)
+	return nil
 }
 
 // StrictServerInterface represents all server handlers.
@@ -371,17 +363,17 @@ func (sh *strictHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/7xU224TPRB+FWv+/3JJNi3lYq9IK4QqIVQBFRdVhSbrSeLiU+1x26jKuyPvIc1hgYIq",
-	"ruKs7fnmO3geoXbGO0uWI1SPEOslGWyW07p2yXJe+uA8BVbUbMxQo60pLyXFOijPylmo4CyFQJZFd0C4",
-	"ueAlCewKFUAPaLwmqCZlWY5OCpi7YJChAunSTBMUYJRVJhmoygJ45QkqsMnMKMC6gDoQMslvyIfgX5Sh",
-	"yGi8uF+S3QYW9xhFdxW2MZHpFSuTYTuoyEHZRYYig0oforzLnwVKGSjGPYJi6bSksM0TlEG5xKC0xrfd",
-	"11HtzHYbLdJAC0oe4l9adZtIKEmW1VxREHMXfqryFoqy/Ob1E4qyTItWVItmwMuPaOgZ/KaZoPjqnFSD",
-	"MiYv/9YxjZFFd/+Ztq0LCHSbVCAJ1VUWsKNXbFTuw7sTpp0+rzdl3eyGas40zpqz3Yv4RLeJ4sDD+PeZ",
-	"MfjwgeyCl1AdnZwM6P+S5u6DGWX7/5PfWbHjwqHC+biyc3fY6vTiXEQKd13SDVpcKLsQM7Tf+97jKEdB",
-	"cdP052QuvTjN29OLcyjgjkJsa5WjcjTJqjhPFr2CCo5H5egYCvDIy8bDcV8z/1lQ43L2GHM/5xIqeE88",
-	"7c9kktE7G9sAHJVl/qmdZWonJ3qvVd1cHt/E3EU/Y/NKMZnm4v+B5lDBf+OnaTzuRvG4n8PrjWoYAq5a",
-	"0fbEElpFzs5uWORDMRmDYdX2LlDrre0CvIsDLHcSD62ZFPnUydUfUfwVs8FXtd6NDodE6wOZJy/Ww0bd",
-	"ATW7l9ENChFTXVOM86T1ak/XlolAYel+M4mbkm12I1RXj5CChgrGOXnr6/WPAAAA//+9cBedewcAAA==",
+	"H4sIAAAAAAAC/6yUT08bMRDFv4o17XGbbKBUyLfAoUKqKtQW9YBQNdmdzZr6H/YYiNB+98q7m5CQ9K96",
+	"ilce+837+WWeoHLGO0uWI8gniFVLBvvlvKpcspyXPjhPgRX1GwvUaCvKy5piFZRn5SxIOE8hkGUxFgjX",
+	"CG5J4HhRAfSIxmsCOSvLcnJSQOOCQQYJtUsLTVCAUVaZZECWBfDKE0iwySwoQFdAFQiZ6m/I++JflKHI",
+	"aLx4aMluC4sHjGI8CtuayPSGlcmyo1TkoOwyS6l6X+LKqrtEQtVkWTWKgmhc+KnFLSVl+d3bZxVlmZaD",
+	"I4vmAMiPaF7SE63TNYVtBZgrg7X46lytDnpIvv5XXBoji/H8HzLrCgh0l1SgGuR1BjjaKzaJ2XnBnf5u",
+	"Nte5xS1VnNs/72vHGH6iu0TxQBr/J0GDjx/ILrkFeXRy0odx/T37nd++j30buUzZxu23OL+8EJHC/Rgj",
+	"gxaXyi7FAu33dc9xkjkr7pv9nMyVF2d5e355AQXcU4jDXeWknMwyM+fJolcg4XhSTo6hAI/c9qCm6zvz",
+	"x5J6lBkk5n4uapDwnni+rsnmonc2DpSPyjL/VM4yDTMBvdeq6g9Pb2PuYj098koxmf7g60ANSHg1fZ4z",
+	"03HITNcTpttQwxBwNUB7AUtoFTm/6MZFLorJGAyroXeBWm9tF+BdPOByJ1YwPCJFPnP16q8s/srZweh2",
+	"u5HhkKjbwzw7EJQxv+N/R8RUVRRjk7RevaAw6AoUlh42Q6nXHZIWQV4/QQoaJGhXoW5dZHlanpbTnJru",
+	"pvsRAAD//5SYW/ERBgAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
