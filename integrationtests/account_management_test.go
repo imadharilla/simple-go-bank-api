@@ -18,7 +18,7 @@ func TestAccountCreation(t *testing.T) {
 func TestAddBalance(t *testing.T) {
 	t.Run(`should fail if account doesn't exist`, func(t *testing.T) {
 		rec := reqPOSTAddBalance(t, testHandler, 20321, 13.37)
-		requireStatus(t, http.StatusInternalServerError, rec)
+		requireStatus(t, http.StatusNotFound, rec)
 	})
 
 	t.Run(`should fail if amount is zero or negative`, func(t *testing.T) {

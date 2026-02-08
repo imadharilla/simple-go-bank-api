@@ -57,7 +57,7 @@ func (s API) AddBalanceToAccount(ctx context.Context, request AddBalanceToAccoun
 	_, err := s.store.GetAccountById(ctx, request.AccountId)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return AddBalanceToAccount404Response{}, err
+			return AddBalanceToAccount404Response{}, nil
 		}
 		return nil, err
 	}
