@@ -21,7 +21,7 @@ func NewAPI(logger *slog.Logger, store store.Store) *API {
 
 func (s API) GetAccounts(ctx context.Context, request GetAccountsRequestObject) (GetAccountsResponseObject, error) {
 	//TODO implement me
-	return nil, fmt.Errorf("Not implemented yet")
+	return nil, fmt.Errorf("not implemented yet")
 }
 
 func (s API) CreateAccount(ctx context.Context, request CreateAccountRequestObject) (CreateAccountResponseObject, error) {
