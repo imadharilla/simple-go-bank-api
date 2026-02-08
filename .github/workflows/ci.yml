@@ -1,0 +1,54 @@
+name: ci.yml
+on:
+
+jobs:
+  linter:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Disabling shallow clone is recommended for improving relevancy of reporting
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          args: --timeout=5m
+        env:
+          GOPROXY: ${{ secrets.GOPROXY }}
+          GONOSUMDB: ${{ vars.GONOSUMDB }}
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - run: docker compose up -d
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Wait for Postgres
+        run: |
+          timeout 60 bash -c 'until pg_isready -h localhost -p 5432 -U postgres; do echo "Waiting for Postgres..."; sleep 2; done'
+
+      - name: Test
+        env:
+          DEPLOY_ENV: test
+        run: go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out -v ./...
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+
+
