@@ -7,6 +7,7 @@ import (
 	"testing"
 	"tiny-bank-api/api"
 	"tiny-bank-api/pkg/database"
+	"tiny-bank-api/pkg/logging"
 	"tiny-bank-api/store"
 
 	"github.com/go-chi/chi/v5"
@@ -27,7 +28,7 @@ func TestMain(m *testing.M) {
 		_ = db.Close()
 	}()
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := logging.DevLogger()
 	sqldb := database.LoggingDB{SQLDB: db, Logger: logger}
 	s := store.NewStore(sqldb)
 

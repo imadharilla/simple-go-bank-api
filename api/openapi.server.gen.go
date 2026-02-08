@@ -18,6 +18,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
@@ -39,6 +40,12 @@ type Account struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// AddBalanceRequest defines model for AddBalanceRequest.
+type AddBalanceRequest struct {
+	// Amount The amount to add to the account balance
+	Amount float64 `json:"amount"`
+}
+
 // CreateAccountRequest defines model for CreateAccountRequest.
 type CreateAccountRequest struct {
 	// Name Name of the account holder
@@ -48,6 +55,9 @@ type CreateAccountRequest struct {
 // CreateAccountJSONRequestBody defines body for CreateAccount for application/json ContentType.
 type CreateAccountJSONRequestBody = CreateAccountRequest
 
+// AddBalanceToAccountJSONRequestBody defines body for AddBalanceToAccount for application/json ContentType.
+type AddBalanceToAccountJSONRequestBody = AddBalanceRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Get all accounts
@@ -56,6 +66,9 @@ type ServerInterface interface {
 	// Create a new account
 	// (POST /accounts)
 	CreateAccount(w http.ResponseWriter, r *http.Request)
+	// Add balance to an account
+	// (POST /accounts/{accountId}/add-balance)
+	AddBalanceToAccount(w http.ResponseWriter, r *http.Request, accountId int64)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -71,6 +84,12 @@ func (_ Unimplemented) GetAccounts(w http.ResponseWriter, r *http.Request) {
 // Create a new account
 // (POST /accounts)
 func (_ Unimplemented) CreateAccount(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Add balance to an account
+// (POST /accounts/{accountId}/add-balance)
+func (_ Unimplemented) AddBalanceToAccount(w http.ResponseWriter, r *http.Request, accountId int64) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -102,6 +121,31 @@ func (siw *ServerInterfaceWrapper) CreateAccount(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateAccount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddBalanceToAccount operation middleware
+func (siw *ServerInterfaceWrapper) AddBalanceToAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddBalanceToAccount(w, r, accountId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -230,6 +274,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/accounts", wrapper.CreateAccount)
 	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/accounts/{accountId}/add-balance", wrapper.AddBalanceToAccount)
+	})
 
 	return r
 }
@@ -266,6 +313,39 @@ func (response CreateAccount201Response) VisitCreateAccountResponse(w http.Respo
 	return nil
 }
 
+type AddBalanceToAccountRequestObject struct {
+	AccountId int64 `json:"accountId"`
+	Body      *AddBalanceToAccountJSONRequestBody
+}
+
+type AddBalanceToAccountResponseObject interface {
+	VisitAddBalanceToAccountResponse(w http.ResponseWriter) error
+}
+
+type AddBalanceToAccount200Response struct {
+}
+
+func (response AddBalanceToAccount200Response) VisitAddBalanceToAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type AddBalanceToAccount400Response struct {
+}
+
+func (response AddBalanceToAccount400Response) VisitAddBalanceToAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type AddBalanceToAccount404Response struct {
+}
+
+func (response AddBalanceToAccount404Response) VisitAddBalanceToAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Get all accounts
@@ -274,6 +354,9 @@ type StrictServerInterface interface {
 	// Create a new account
 	// (POST /accounts)
 	CreateAccount(ctx context.Context, request CreateAccountRequestObject) (CreateAccountResponseObject, error)
+	// Add balance to an account
+	// (POST /accounts/{accountId}/add-balance)
+	AddBalanceToAccount(ctx context.Context, request AddBalanceToAccountRequestObject) (AddBalanceToAccountResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -360,20 +443,56 @@ func (sh *strictHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// AddBalanceToAccount operation middleware
+func (sh *strictHandler) AddBalanceToAccount(w http.ResponseWriter, r *http.Request, accountId int64) {
+	var request AddBalanceToAccountRequestObject
+
+	request.AccountId = accountId
+
+	var body AddBalanceToAccountJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddBalanceToAccount(ctx, request.(AddBalanceToAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddBalanceToAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddBalanceToAccountResponseObject); ok {
+		if err := validResponse.VisitAddBalanceToAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/6yUT08bMRDFv4o17XGbbKBUyLfAoUKqKtQW9YBQNdmdzZr6H/YYiNB+98q7m5CQ9K96",
-	"ilce+837+WWeoHLGO0uWI8gniFVLBvvlvKpcspyXPjhPgRX1GwvUaCvKy5piFZRn5SxIOE8hkGUxFgjX",
-	"CG5J4HhRAfSIxmsCOSvLcnJSQOOCQQYJtUsLTVCAUVaZZECWBfDKE0iwySwoQFdAFQiZ6m/I++JflKHI",
-	"aLx4aMluC4sHjGI8CtuayPSGlcmyo1TkoOwyS6l6X+LKqrtEQtVkWTWKgmhc+KnFLSVl+d3bZxVlmZaD",
-	"I4vmAMiPaF7SE63TNYVtBZgrg7X46lytDnpIvv5XXBoji/H8HzLrCgh0l1SgGuR1BjjaKzaJ2XnBnf5u",
-	"Nte5xS1VnNs/72vHGH6iu0TxQBr/J0GDjx/ILrkFeXRy0odx/T37nd++j30buUzZxu23OL+8EJHC/Rgj",
-	"gxaXyi7FAu33dc9xkjkr7pv9nMyVF2d5e355AQXcU4jDXeWknMwyM+fJolcg4XhSTo6hAI/c9qCm6zvz",
-	"x5J6lBkk5n4uapDwnni+rsnmonc2DpSPyjL/VM4yDTMBvdeq6g9Pb2PuYj098koxmf7g60ANSHg1fZ4z",
-	"03HITNcTpttQwxBwNUB7AUtoFTm/6MZFLorJGAyroXeBWm9tF+BdPOByJ1YwPCJFPnP16q8s/srZweh2",
-	"u5HhkKjbwzw7EJQxv+N/R8RUVRRjk7RevaAw6AoUlh42Q6nXHZIWQV4/QQoaJGhXoW5dZHlanpbTnJru",
-	"pvsRAAD//5SYW/ERBgAA",
+	"H4sIAAAAAAAC/7RWXW/jRBT9K6MLDyB5Y2fbopUlHtJFQpEArWBXPCwVuvHcJLN4Pjpzp92o8n9H44/E",
+	"jV1aEPvksebjnnPumWM/QGW1s4YMBygfIFR70tgOV1Vlo+E0dN468qyondhgjaaiNJQUKq8cK2ughLfR",
+	"ezIs+gXCbgXvSWB/UAb0GbWrCcplURSLqwy21mtkKEHauKkJMtDKKB01lEUGfHAEJZioN+ShyaDyhEzy",
+	"T+Rp8fdKU2DUTtzvyYwLi3sMot8K45rI9IqVTmX7UoG9MrtUSslpiQ9G3UYSSpJhtVXkxdb6JymOKinD",
+	"312eqijDtOsYGdQzQv6C+lw9sbe1JD+uACulUYrfrZVqlkN08r/KVWNg0e9/oWZNBp5uo/IkofyYBOzp",
+	"ZUfHPOrgI3w3x+Ps5hNVnOCvpLzuNv5Kt5HCjBVRDxY9Y5fotHOCrUAp02PM8YRo7MnnLLkolhNXntHu",
+	"Ec3xedty76/Vk5T+T0do/PwTmR3voXx9ddUyGd6Xz/WvxTGlkZYps7VTiKt3axHI3/XXQqPBnTI7sUHz",
+	"14A5LJJvFLdgf4v6gxPXaXr1bg0Z3JEP3VnFolgsk2bWkUGnoISLRbG4gAwc8r4VKh/OTC87aqVMQmLC",
+	"s5ZQwo/Eq2FNIhecNaFT+XVRpEdlDVNnIHSuVlW7Of8UEoohDdNIMel249eetlDCV/kpN/M+NPMhMZuj",
+	"aug9HjrRzsQStQqcOnpkkRaFqDX6Q4ddYF2PpjNwNsywfGQr6JpIga+tPPwriv/EbNa6zWPLsI/UTGRe",
+	"zhil92+fBSLEqqIQtrGuD2cqdHUFCkP3x5BNS47Nzx/60Vo2OUr5avR1mtfrFCvv7Uk1hx41MfkA5ce5",
+	"OFn/cH7/+mTR1tBBsIV0MaBsDTpEXwlHdHCuVTbS/tkvRXPzZRo7zdgXdbWYdvXnVgaUctLRDC7nNqzN",
+	"HdZKip6W+IYWu0U2xPYfsSguqu9F8W13wOXTPjKWxdZGI8/Ms5Ly+CuSemVGDkoL26zq2h19DSXsmV2Z",
+	"57WtsN7bwOWb4k2Rp/hpbpq/AwAA///jUIYcKgkAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

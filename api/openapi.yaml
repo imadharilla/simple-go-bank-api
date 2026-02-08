@@ -33,6 +33,32 @@ paths:
         '201':
           description: Account created successfully
 
+  /accounts/{accountId}/add-balance:
+    post:
+      summary: Add balance to an account
+      operationId: addBalanceToAccount
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          description: The ID of the account to add money to
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddBalanceRequest'
+      responses:
+        '200':
+          description: Money added successfully
+        '400':
+          description: Invalid request (e.g., amount <= 0)
+        '404':
+          description: Account not found
+
 components:
   schemas:
     Account:
@@ -79,3 +105,16 @@ components:
           minLength: 1
           maxLength: 255
           example: "Aimad Woodie"
+
+    AddBalanceRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: number
+          format: double
+          description: The amount to add to the account balance
+          minimum: 0.01
+          example: 100.50
+
