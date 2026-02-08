@@ -7,15 +7,12 @@ A Go-based API server for managing bank accounts.
 - Go 1.25.7 or later
 - Docker or Podman (for running the database locally)
 
-## Building & Testing
-To build the project:
-
+## Testing
+First make sure the db is running & migrated by running:
 ```bash
-go build -o sumup-bank-api .
+make up
 ```
-To run tests
- - First make sure the db is running & migrated by running `make up`
- - then run the tests: 
+Then run the tests:
 ```bash
 go test -v ./...
 ```
