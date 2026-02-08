@@ -33,6 +33,14 @@ make down
 go run . serve
 ```
 
+### 3. Open Documentation in Browser (Optional)
+
+Once the API server is running, you can view the API documentation:
+
+```bash
+open http://localhost:8080/api/docs
+```
+
 ## API Documentation
 
 The API is defined using OpenAPI 3.0 specification. The specification file is located at `api/openapi.yaml`.

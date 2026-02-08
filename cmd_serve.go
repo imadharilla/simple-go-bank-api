@@ -91,6 +91,29 @@ func NewService(logger *slog.Logger, store store.Store) *chi.Mux {
 	})
 
 	router.Route("/api", func(r chi.Router) {
+
+		// Serve Swagger UI documentation
+		r.Get("/openapi.yaml", func(w http.ResponseWriter, req *http.Request) {
+			http.ServeFile(w, req, "api/openapi.yaml")
+		})
+		r.Get("/docs", func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<!DOCTYPE html>
+				<html>
+				<head>
+				  <title>SumUp Bank API Docs</title>
+				  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+				</head>
+				<body>
+				  <div id="swagger-ui"></div>
+				  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+				  <script>
+					SwaggerUIBundle({ url: "/api/openapi.yaml", dom_id: "#swagger-ui" });
+				  </script>
+				</body>
+				</html>`))
+		})
+
 		r.Mount("/", api.HandlerFromMux(apiStrictHandler, nil))
 	})
 	return router
